@@ -24,9 +24,16 @@ Open `index.html` in a browser. That is all.
 3. Under Build and deployment, choose "Deploy from a branch", pick `main` and `/ (root)`, and save.
 4. After a minute the site is live at `https://<your-username>.github.io/<repository-name>/`.
 
-## Where the data is kept
+## Where the data is kept, and how to back it up
 
-All data is saved in the browser's local storage on the device you use. It is not sent anywhere. Clearing site data or using another browser or phone starts with an empty book, so use "Copy all items for Excel" on the Suggestions tab now and then as a backup.
+There is no login. All data is saved in the browser's local storage on the device you use and is not sent anywhere. Clearing site data, or opening the page on another phone or browser, starts with an empty book.
+
+To keep it safe or move it to another device, open the Suggestions tab, then "Save and move your data":
+
+- **Download backup** saves a `.json` file with everything: items, rates, wholesalers, night counts, deliveries and expenses.
+- **Restore backup** loads that file on any device and replaces the data there.
+
+The page shows a reminder when the last backup is more than 7 days old.
 
 ## Notes
 

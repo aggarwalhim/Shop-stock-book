@@ -369,6 +369,7 @@ function normalize(){
   if(!Array.isArray(H.recv)) H.recv=[];
   if(!H.months||typeof H.months!=='object') H.months={};
   if(!S.exp||typeof S.exp!=='object') S.exp={};
+  if(typeof S.lastBackup!=='string') S.lastBackup='';
 }
 
 /* ---------- derived values ---------- */
@@ -521,6 +522,10 @@ function renderHero(){
   }
   if(new Date().getHours()>=21&&S.items.length&&ncCount()<S.items.length){
     b+='<div class="banner" style="margin-top:10px"><div><b>Night count time.</b> '+esc(progTxt())+'.</div><button class="btn small" type="button" data-tab="night">Open night count</button></div>';
+  }
+  if(!mainRef&&S.items.length&&!S.sample){
+    var lb=S.lastBackup, age=lb?Math.round((parse(today())-parse(lb))/864e5):null;
+    if(age==null||age>=7) b+='<div class="banner quiet" style="margin-top:10px"><div><b>Back up your data.</b> '+(lb?'Last backup was '+pl(age,'day')+' ago. ':'No backup saved yet. ')+'Your book is kept in this browser only.</div><button class="btn small" type="button" data-act="backup">Download backup</button></div>';
   }
   $('#todayBanner').innerHTML=b;
   updateBadge();
@@ -768,6 +773,7 @@ function renderIdeas(){
   advice().forEach(function(a){h+='<div class="tip '+a.tone+'"><h3>'+esc(a.t)+'</h3><p>'+a.p+'</p></div>'});
   h+='</div>';
   h+='<h2 class="sec">Your notes</h2><div class="fld"><label for="notes">Anything to remember (rates, schemes, deals, wholesaler promises)</label><textarea id="notes" rows="6">'+esc(S.notes)+'</textarea></div>';
+  h+='<h2 class="sec">Save and move your data</h2><section class="card"><p>There is no login, so your book is saved in this browser on this device. To keep it safe or move it to another phone or computer, download a backup file and restore it there.</p><p class="meta" style="margin-top:6px">'+(S.lastBackup?'Last backup: '+esc(longD(S.lastBackup))+'.':'No backup saved yet.')+'</p><div class="actions"><button class="btn primary" type="button" data-act="backup">Download backup</button><button class="btn" type="button" data-act="restore-pick">Restore backup</button><input id="restoreFile" type="file" accept=".json,application/json" hidden></div></section>';
   h+='<h2 class="sec">Your data</h2><div class="actions"><button class="btn" type="button" data-act="copy-tsv">Copy all items for Excel</button><button class="btn danger" type="button" data-act="clear-all">Remove all items</button></div><p class="meta" style="margin-top:8px">Copy all items puts a table on the clipboard that you can paste into Excel or Google Sheets.</p>';
   $('#view').innerHTML=h;
 }
@@ -1222,6 +1228,30 @@ async function saveBlob(name,blob){
   a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(function(){URL.revokeObjectURL(url)},4000);
 }
+var pendingRestore=null;
+async function downloadBackup(){
+  var data=JSON.stringify({app:'shop-stock-book',v:1,saved:new Date().toISOString(),S:S,H:pruneHist()});
+  try{
+    await saveBlob('Shop-Stock-Backup-'+today()+'.json',new Blob([data],{type:'application/json'}));
+    S.lastBackup=today(); touch(); renderHero(); toast('Backup saved');
+  }catch(e){ if(!e||e.code!=='declined') toast('Could not save the backup.'); }
+}
+function readRestore(file){
+  var r=new FileReader();
+  r.onload=function(){
+    try{
+      var o=JSON.parse(r.result); if(!o||!o.S||!Array.isArray(o.S.items)) throw 1;
+      pendingRestore=o;
+      openOv('<h2>Restore this backup?</h2><p>Saved on '+esc(String(o.saved||'').slice(0,10)||'an unknown date')+', with '+pl(o.S.items.length,'item')+' and '+pl((o.S.dealers||[]).length,'wholesaler')+'. Restoring replaces everything that is in the book now.</p><div class="actions"><button class="btn primary" type="button" data-act="do-restore">Replace my data</button><button class="btn" type="button" data-act="close">Cancel</button></div>');
+    }catch(e){toast('That file is not a Shop Stock Book backup.');}
+  };
+  r.onerror=function(){toast('Could not read the file.')};
+  r.readAsText(file);
+}
+document.addEventListener('change',function(e){
+  var t=e.target;
+  if(t&&t.id==='restoreFile'&&t.files&&t.files[0]){readRestore(t.files[0]);t.value='';}
+});
 async function downloadDocx(){
   if(!window.JSZip){toast('Word export did not load. Check the connection and reload.');return;}
   try{
@@ -1423,6 +1453,11 @@ document.addEventListener('click',function(e){
     case 'ceq':
       var ce2=$('#k_expr'); try{var rv=Math.round(evalExpr(ce2.value)*1e6)/1e6; ce2.value=String(rv); calcShow();}catch(e){calcShow();} break;
     case 'packn': $('#k_pn').value=b.dataset.v; calcPack(); break;
+    case 'backup': downloadBackup(); break;
+    case 'restore-pick': var rf=$('#restoreFile'); if(rf) rf.click(); else { goTab('ideas'); toast('Tap Restore backup here.'); } break;
+    case 'do-restore':
+      if(pendingRestore){S=pendingRestore.S;H=pendingRestore.H||{snaps:{}};pendingRestore=null;normalize();S.lastBackup=today();touch(true);closeOv();$('#shopName').value=S.shop;render();toast('Backup restored');}
+      break;
     case 'copy-week': copyText(weekText(),'Next week list copied.'); break;
     case 'rfilter': rFilter=b.dataset.f; renderReport(); break;
     case 'ncfilter': fNC=!fNC; renderNight(); break;
@@ -1519,6 +1554,7 @@ async function boot(){
   normalize();
   if(upgrade()) normalize();
   $('#shopName').value=S.shop;
+  try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   setSave('start');
   render();
   var db=null;
